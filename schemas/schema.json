@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/neovim-treesitter/treesitter-parser-registry/main/schemas/schema.json",
+  "title": "treesitter-parser-registry schema",
+  "description": "Validates registry.json entries and query-repo parser.json manifests",
+  "$defs": {
+    "semverTag": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+    },
+    "gitUri": {
+      "type": "string",
+      "format": "uri"
+    },
+    "inheritRef": {
+      "description": "Known-good version bounds for one inherited query repo",
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url":         { "$ref": "#/$defs/gitUri" },
+        "min_version": { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] },
+        "max_version": { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "parserManifest": {
+      "description": "parser.json inside each query repo root",
+      "type": "object",
+      "required": ["lang"],
+      "properties": {
+        "lang":         { "type": "string" },
+        "url":          { "type": ["string", "null"], "format": "uri" },
+        "location":     { "type": ["string", "null"] },
+        "semver":       { "type": ["boolean", "null"] },
+        "min_version":  { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] },
+        "max_version":  { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] },
+        "queries_only": { "type": ["boolean", "null"] },
+        "inherits": {
+          "description": "Known-good version bounds for each inherited query repo. Keys are language names matching registry entries.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/inheritRef" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "selfContainedSource": {
+      "type": "object",
+      "required": ["type", "url", "semver", "queries_path"],
+      "properties": {
+        "type":          { "const": "self_contained" },
+        "url":           { "$ref": "#/$defs/gitUri" },
+        "semver":        { "type": "boolean" },
+        "queries_path":  { "type": "string" },
+        "location":      { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "externalQueriesSource": {
+      "type": "object",
+      "required": ["type", "parser_url", "parser_semver", "queries_url", "queries_semver"],
+      "properties": {
+        "type":             { "const": "external_queries" },
+        "parser_url":       { "$ref": "#/$defs/gitUri" },
+        "parser_semver":    { "type": "boolean" },
+        "parser_location":  { "type": "string" },
+        "queries_url":      { "$ref": "#/$defs/gitUri" },
+        "queries_semver":   { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "queriesOnlySource": {
+      "type": "object",
+      "required": ["type", "url", "semver"],
+      "properties": {
+        "type":   { "const": "queries_only" },
+        "url":    { "$ref": "#/$defs/gitUri" },
+        "semver": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "localSource": {
+      "type": "object",
+      "required": ["type", "path"],
+      "properties": {
+        "type":          { "const": "local" },
+        "path":          { "type": "string" },
+        "queries_path":  { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "registryEntry": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": {
+          "oneOf": [
+            { "$ref": "#/$defs/selfContainedSource" },
+            { "$ref": "#/$defs/externalQueriesSource" },
+            { "$ref": "#/$defs/queriesOnlySource" },
+            { "$ref": "#/$defs/localSource" }
+          ]
+        },
+        "filetypes": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "requires":  { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "additionalProperties": { "$ref": "#/$defs/registryEntry" }
+}
