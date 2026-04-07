@@ -1,0 +1,178 @@
+name: Validate Registry
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly: check URL reachability and subrepo CI health even without code changes
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  # ── 1. Schema validation ──────────────────────────────────────────────────
+  schema:
+    name: Validate schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ajv-cli
+        run: npm install --global ajv-cli ajv-formats
+
+      - name: Validate registry.json against schema
+        run: |
+          ajv validate \
+            --spec=draft2020 \
+            --strict=false \
+            -c ajv-formats \
+            -s schemas/schema.json \
+            -d registry.json
+
+  # ── 2. URL reachability ───────────────────────────────────────────────────
+  urls:
+    name: Check URLs
+    runs-on: ubuntu-latest
+    # Never fail CI — upstream repos may have transient downtime.
+    # Results are reported as annotations and a job summary only.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract and check all URLs
+        run: |
+          python3 - <<'EOF'
+          import json, os, urllib.request, sys
+
+          with open("registry.json") as f:
+              registry = json.load(f)
+
+          urls = set()
+          for lang, entry in registry.items():
+              if lang == "$schema":
+                  continue
+              src = entry.get("source", {})
+              for field in ("url", "parser_url", "queries_url"):
+                  v = src.get(field)
+                  if v:
+                      urls.add((lang, field, v))
+
+          failures = []
+          for lang, field, url in sorted(urls):
+              try:
+                  req = urllib.request.Request(url, method="HEAD")
+                  req.add_header("User-Agent", "treesitter-registry-ci/1.0")
+                  resp = urllib.request.urlopen(req, timeout=10)
+                  status = resp.status
+              except Exception as e:
+                  status = str(e)
+
+              if isinstance(status, int) and status < 400:
+                  print(f"  OK  {lang}/{field}: {url}")
+              else:
+                  failures.append((lang, field, url, status))
+                  print(f"  FAIL {lang}/{field}: {url}  ({status})")
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
+          if failures:
+              print(f"\n::warning::URL check: {len(failures)} unreachable URL(s) found (see job summary)")
+              with open(summary_path, "a") as f:
+                  f.write("## Unreachable URLs\n\n")
+                  f.write("| Lang | Field | URL | Status |\n")
+                  f.write("|------|-------|-----|--------|\n")
+                  for lang, field, url, status in failures:
+                      f.write(f"| `{lang}` | `{field}` | {url} | {status} |\n")
+          else:
+              print("\nAll URLs reachable.")
+          EOF
+
+  # ── 3. Query subrepo CI health ─────────────────────────────────────────────
+  subrepos:
+    name: Check query subrepo CI
+    runs-on: ubuntu-latest
+    # Warn-only: a broken subrepo CI should be visible but not block registry changes.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check CI badge status for each external_queries subrepo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'EOF'
+          import json, subprocess, sys, os
+
+          with open("registry.json") as f:
+              registry = json.load(f)
+
+          failures = []
+          unknown = []
+
+          for lang, entry in sorted(registry.items()):
+              if lang == "$schema":
+                  continue
+              src = entry.get("source", {})
+              if src.get("type") != "external_queries":
+                  continue
+
+              queries_url = src.get("queries_url", "")
+              # Extract owner/repo from https://github.com/<owner>/<repo>
+              parts = queries_url.rstrip("/").split("/")
+              if len(parts) < 2 or "github.com" not in queries_url:
+                  unknown.append((lang, queries_url, "non-GitHub URL"))
+                  continue
+
+              repo = f"{parts[-2]}/{parts[-1]}"
+
+              # Use gh CLI to get the most recent workflow run conclusion
+              result = subprocess.run(
+                  ["gh", "run", "list", "--repo", repo,
+                   "--workflow", "validate.yml",
+                   "--limit", "1",
+                   "--json", "conclusion,status",
+                   "--jq", ".[0]"],
+                  capture_output=True, text=True
+              )
+              if result.returncode != 0 or not result.stdout.strip():
+                  unknown.append((lang, repo, result.stderr.strip() or "no runs found"))
+                  continue
+
+              try:
+                  run_info = json.loads(result.stdout)
+              except json.JSONDecodeError:
+                  unknown.append((lang, repo, "JSON parse error"))
+                  continue
+
+              conclusion = run_info.get("conclusion", "")
+              status = run_info.get("status", "")
+
+              if conclusion == "success":
+                  print(f"  OK  {lang}: {repo}")
+              elif status in ("in_progress", "queued", "waiting"):
+                  print(f"  SKIP {lang}: {repo} (in progress)")
+              else:
+                  failures.append((lang, repo, conclusion or status))
+                  print(f"  FAIL {lang}: {repo} ({conclusion or status})")
+
+          # Write summary
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
+          with open(summary_path, "a") as f:
+              if failures:
+                  f.write(f"## Query Subrepo CI: {len(failures)} failing\n\n")
+                  f.write("| Lang | Repo | Status |\n")
+                  f.write("|------|------|--------|\n")
+                  for lang, repo, status in failures:
+                      f.write(f"| `{lang}` | [{repo}](https://github.com/{repo}) | `{status}` |\n")
+              if unknown:
+                  f.write(f"\n## Query Subrepo CI: {len(unknown)} unknown\n\n")
+                  f.write("| Lang | Repo | Reason |\n")
+                  f.write("|------|------|--------|\n")
+                  for lang, repo, reason in unknown:
+                      f.write(f"| `{lang}` | {repo} | {reason} |\n")
+              if not failures and not unknown:
+                  f.write("## Query Subrepo CI: all passing\n")
+
+          if failures:
+              print(f"\n::warning::{len(failures)} query subrepo(s) have failing CI (see job summary)")
+          EOF
