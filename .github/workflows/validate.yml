@@ -23,12 +23,15 @@ jobs:
 
       - name: Validate registry.json against schema
         run: |
+          # Strip the $schema meta-key before validating — the schema's root
+          # "type: object / additionalProperties: registryEntry" would reject it.
+          jq 'del(.["$schema"])' registry.json > registry-stripped.json
           ajv validate \
             --spec=draft2020 \
             --strict=false \
             -c ajv-formats \
             -s schemas/schema.json \
-            -d registry.json
+            -d registry-stripped.json
 
   # ── 2. URL reachability ───────────────────────────────────────────────────
   urls:
