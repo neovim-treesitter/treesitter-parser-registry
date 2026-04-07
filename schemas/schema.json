@@ -13,13 +13,15 @@
       "format": "uri"
     },
     "inheritRef": {
-      "description": "Known-good version bounds for one inherited query repo",
+      "description": "Pinned parser version for one inherited lang. The installer uses parser_version as the checkout ref for that lang's parser.",
       "type": "object",
       "required": ["url"],
       "properties": {
-        "url":         { "$ref": "#/$defs/gitUri" },
-        "min_version": { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] },
-        "max_version": { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] }
+        "url":            { "$ref": "#/$defs/gitUri" },
+        "parser_version": {
+          "description": "Exact git ref (tag or SHA) of the inherited lang's parser these queries are tested against.",
+          "type": ["string", "null"]
+        }
       },
       "additionalProperties": false
     },
@@ -46,7 +48,7 @@
           "type": ["boolean", "null"]
         },
         "inherits": {
-          "description": "Known-good version bounds for each inherited query repo. Keys are language names matching registry entries.",
+          "description": "Pinned parser versions for each inherited lang. Keys are language names matching registry entries. Each value pins the parser ref these queries were tested against.",
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/inheritRef" }
         }
