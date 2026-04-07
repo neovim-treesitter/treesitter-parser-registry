@@ -54,14 +54,30 @@
       "additionalProperties": false
     },
     "selfContainedSource": {
+      "description": "Parser and queries live in the same upstream repo. Exactly one of queries_path or queries_dir must be set.",
       "type": "object",
-      "required": ["type", "url", "semver", "queries_path"],
+      "required": ["type", "url", "semver"],
       "properties": {
-        "type":          { "const": "self_contained" },
-        "url":           { "$ref": "#/$defs/gitUri" },
-        "semver":        { "type": "boolean" },
-        "queries_path":  { "type": "string" },
-        "location":      { "type": "string" }
+        "type":     { "const": "self_contained" },
+        "url":      { "$ref": "#/$defs/gitUri" },
+        "semver":   { "type": "boolean" },
+        "location": { "type": "string" },
+        "queries_path": {
+          "description": "Path relative to repo root of the directory containing .scm files directly (e.g. 'queries' or 'queries/nvim'). Use when the query dir does not follow the <dir>/<lang>/ pattern.",
+          "type": "string"
+        },
+        "queries_dir": {
+          "description": "Path relative to repo root of the parent directory whose <lang>/ subdirectory contains the .scm files (e.g. 'nvim-queries'). The installer appends /<lang> automatically.",
+          "type": "string"
+        },
+        "generate": {
+          "description": "Set true when the parser repo requires `tree-sitter generate` before compilation. Lives here (not in parser.json) because self_contained has no separate query repo.",
+          "type": "boolean"
+        },
+        "generate_from_json": {
+          "description": "When generate is true: true = use src/grammar.json, false = use grammar.js.",
+          "type": "boolean"
+        }
       },
       "additionalProperties": false
     },
