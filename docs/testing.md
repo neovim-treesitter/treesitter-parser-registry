@@ -1,6 +1,6 @@
 # Testing
 
-Each language's query repository (`nvim-treesitter-queries-<lang>`) ships a standardised CI workflow (`query-validate.yml`) that runs two types of validation:
+Each language's query repository (`nvim-treesitter-queries-<lang>`) ships a thin `.github/workflows/validate.yml` that calls the reusable [`query-validate.yml`](https://github.com/neovim-treesitter/.github/blob/main/.github/workflows/query-validate.yml) workflow from `neovim-treesitter/.github`. It runs two types of validation:
 
 1. **Query validation** — `ts_query_ls check queries/` verifies structural correctness of every `.scm` file
 2. **Corpus tests** — `tree-sitter test` runs parse tree snapshot tests from `test/corpus/*.txt` when present
@@ -169,7 +169,7 @@ This means the query consumer (Neovim) prepends the inherited language's queries
 
 ### How CI resolves dependencies
 
-The `query-validate.yml` workflow performs a BFS traversal of the `; inherits:` graph before running `ts_query_ls`. For each dependency language `<dep>`:
+The reusable `query-validate.yml` workflow performs a BFS traversal of the `; inherits:` graph before running `ts_query_ls`. For each dependency language `<dep>`:
 
 1. The workflow fetches query files from `nvim-treesitter-queries-<dep>` (the corresponding repo for that language)
 2. Files are written to `query-deps/<dep>/` inside the workspace
@@ -224,7 +224,7 @@ For a language with transitive dependencies (e.g. `typescript` inherits `javascr
 
 ## Running CI locally
 
-The `query-validate.yml` workflow does the following in order. To replicate it on a local checkout:
+The reusable [`query-validate.yml`](https://github.com/neovim-treesitter/.github/blob/main/.github/workflows/query-validate.yml) workflow does the following in order. To replicate it on a local checkout:
 
 ```sh
 # 1. Resolve dependency queries (repeat for each ; inherits: <dep>)
