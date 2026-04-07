@@ -28,13 +28,23 @@
       "type": "object",
       "required": ["lang"],
       "properties": {
-        "lang":         { "type": "string" },
-        "url":          { "type": ["string", "null"], "format": "uri" },
-        "location":     { "type": ["string", "null"] },
-        "semver":       { "type": ["boolean", "null"] },
-        "min_version":  { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] },
-        "max_version":  { "oneOf": [{ "$ref": "#/$defs/semverTag" }, { "type": "null" }] },
-        "queries_only": { "type": ["boolean", "null"] },
+        "lang":           { "type": "string" },
+        "url":            { "type": ["string", "null"], "format": "uri" },
+        "location":       { "type": ["string", "null"] },
+        "semver":         { "type": ["boolean", "null"] },
+        "parser_version": {
+          "description": "Exact git ref (tag or SHA) of the parser repo that these queries are tested against. Used as the install target; overrides version discovery.",
+          "type": ["string", "null"]
+        },
+        "queries_only":   { "type": ["boolean", "null"] },
+        "generate": {
+          "description": "Set true when the parser repo requires `tree-sitter generate` before compilation (no pre-built src/parser.c).",
+          "type": ["boolean", "null"]
+        },
+        "generate_from_json": {
+          "description": "When generate is true: true = use src/grammar.json, false = use grammar.js.",
+          "type": ["boolean", "null"]
+        },
         "inherits": {
           "description": "Known-good version bounds for each inherited query repo. Keys are language names matching registry entries.",
           "type": "object",
