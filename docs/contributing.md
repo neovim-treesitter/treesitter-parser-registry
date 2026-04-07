@@ -97,8 +97,7 @@ For a language with no inheritance:
   "lang": "mylang",
   "url": "https://github.com/author/tree-sitter-mylang",
   "semver": true,
-  "min_version": "v1.0.0",
-  "max_version": null,
+  "parser_version": "v1.0.0",
   "location": null
 }
 ```
@@ -110,27 +109,22 @@ For a language that inherits from another (e.g. a TypeScript-like language inher
   "lang": "mylang",
   "url": "https://github.com/author/tree-sitter-mylang",
   "semver": true,
-  "min_version": "v1.0.0",
-  "max_version": null,
+  "parser_version": "v1.0.0",
   "location": null,
   "inherits": {
     "ecma": {
       "url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-ecma",
-      "min_version": "v1.0.0",
-      "max_version": null
+      "parser_version": "v1.0.0"
     }
   }
 }
 ```
 
 The `inherits` map must list every language whose queries you `; inherits:` from in your `.scm`
-files. The installer uses the `min_version` / `max_version` bounds here — not the latest release
-— when fetching the parent query repo, so your queries are always merged against a version you
-have tested.
+files. The installer fetches each parent query repo at the exact `parser_version` declared here,
+so your queries are always merged against the version you have tested against.
 
-- Set `min_version` to the oldest parser release you have tested against.
-- Leave `max_version` as `null` until a breaking grammar change occurs that your queries do not
-  yet handle. Set it to the last known-good release while you update the queries, then clear it.
+- Set `parser_version` to the exact tag or commit SHA these queries are tested against.
 - When adding or updating an `inherits` entry, verify CI passes against the declared parent version.
 
 ### CODEOWNERS
@@ -156,29 +150,29 @@ the template at `scripts/templates/query-validate.yml` in the `nvim-treesitter` 
 ### What CI validates
 
 1. **Parser manifest** — `parser.json` is read with `jq` and validated against the JSON Schema
-2. **Parser build** — the parser source is fetched at `min_version` and compiled with
+2. **Parser build** — the parser source is fetched at `parser_version` and compiled with
    `tree-sitter build` to produce a `.so`
 3. **Query correctness** — `ts-query-ls check` is run against the `queries/` directory using
    the compiled parser, catching invalid node names, malformed predicates, and type errors
-4. **Inherit bounds** — if `parser.json` declares an `inherits` block, CI fetches each parent
-   query repo at the declared `min_version` and validates the merged query set
+4. **Inherited queries** — if `parser.json` declares an `inherits` block, CI fetches each parent
+   query repo at the declared `parser_version` and validates the merged query set
 
 A PR cannot be merged if CI fails. This enforces that every merged query set is known to work
-against at least the declared `min_version` of its parser.
+against the exact declared `parser_version`.
 
 ### Automated update checks
 
-A scheduled workflow in each query repo (weekly, Saturday) checks whether a new parser version
-has been released that the current `min_version` does not cover:
+A scheduled workflow in each query repo (weekly) checks whether a new parser version has been
+released that differs from the current `parser_version`:
 
-1. Queries the parser repo's host API for the latest release
-2. If a newer version exists, opens a draft PR bumping `min_version` in `parser.json`
+1. Queries the parser repo's host API for the latest release (or HEAD for non-semver parsers)
+2. If a newer version exists and the repo has tests, opens a PR bumping `parser_version` in `parser.json`
 3. CI on that PR runs the full validation against the new version
 4. If CI passes, the PR can be merged by a maintainer; if it fails, the maintainer knows
-   queries need updating
+   queries need updating before bumping
 
 This means maintainers are notified of upstream parser releases without polling manually.
-The draft PR serves as both the notification and the validation harness.
+The PR serves as both the notification and the validation harness.
 
 ### Releasing a new query version
 
@@ -203,27 +197,21 @@ needed. The tag should reflect the significance of the change:
 
 ### When the parser releases a new version
 
-The automated update check (above) will open a draft PR. If you prefer to do this manually:
+The automated update check (above) will open a PR if tests exist. If you prefer to do this manually:
 
-1. Create a branch, update `min_version` in `parser.json` to the new version
-2. Run CI — if it passes, merge; `min_version` has moved forward
+1. Create a branch, update `parser_version` in `parser.json` to the new tag or SHA
+2. Run CI — if it passes, merge; `parser_version` has moved forward
 3. If CI fails, fix the queries for the new grammar in the same branch before merging
-4. If the new version is incompatible and you cannot fix it immediately, set `max_version` to
-   the last known-good version, open an issue tracking the breakage, and merge the `max_version`
-   update so installers warn users rather than silently installing broken queries
 
 ### When an inherited query repo releases a new version
 
-If `ecma` releases `v2.0.0` and your `typescript` queries declare `"inherits": { "ecma": { "min_version": "v1.0.0" } }`:
+If `ecma` releases `v2.0.0` and your `typescript` queries declare `"inherits": { "ecma": { "parser_version": "v1.0.0" } }`:
 
-1. The installer will continue using `ecma >= v1.0.0` — your users are unaffected immediately
-2. Optionally test against the new ecma version by bumping the `inherits.ecma.min_version` in a branch
-3. If CI passes, update the bound; your users now get the improved ecma queries
+1. The installer will continue using the pinned ecma `v1.0.0` — your users are unaffected immediately
+2. Test against the new ecma version by bumping `inherits.ecma.parser_version` in a branch
+3. If CI passes, update the pin; your users now get the improved ecma queries
 4. If CI fails, the ecma change broke something in the merged set — fix your queries or wait
-   for ecma to publish a fix, then update the bound
-
-The `max_version` in the `inherits` entry can be set to cap the parent version until compatibility
-is restored, just like with the parser version bounds.
+   for ecma to publish a fix, then update the pin
 
 ### When queries need a fix unrelated to the parser
 
@@ -252,7 +240,7 @@ Run `scripts/create-query-repos.sh` to generate all ~330 query repos from the ex
 `runtime/queries/` directory. Each repo gets:
 - Query `.scm` files copied verbatim from the current nvim-treesitter tree
 - A `parser.json` generated by `scripts/gen-parser-manifest.lua` (infers semver from the
-  current revision; sets `min_version` if the revision is a tag, leaves it null otherwise)
+  current revision; sets `parser_version` if the revision is a tag, leaves it null otherwise)
 - The standard CI workflow and README template
 - An initial commit tagged `v0.1.0`
 

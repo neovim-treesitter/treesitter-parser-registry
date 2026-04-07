@@ -97,9 +97,9 @@ Each parser and query source carries a `semver` boolean:
 
 ## parser.json (query repo manifest)
 
-Each query repo carries a `parser.json` at its root declaring which parser it targets, which
-versions it is compatible with, and — critically — which versions of any inherited query repos
-it has been tested against.
+Each query repo carries a `parser.json` at its root declaring which exact parser version its
+queries are tested against, and — for languages with inherited queries — which exact version of
+each parent query repo was used.
 
 ### Simple case (no inheritance)
 
@@ -108,27 +108,24 @@ it has been tested against.
   "lang": "python",
   "url": "https://github.com/tree-sitter/tree-sitter-python",
   "semver": true,
-  "min_version": "v0.23.0",
-  "max_version": null,
+  "parser_version": "v0.23.0",
   "location": null
 }
 ```
 
-### With inheritance bounds
+### With inherited queries
 
 ```json
 {
   "lang": "typescript",
   "url": "https://github.com/tree-sitter/tree-sitter-typescript",
   "semver": false,
-  "min_version": null,
-  "max_version": null,
+  "parser_version": "abc123def456",
   "location": "typescript",
   "inherits": {
     "ecma": {
       "url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-ecma",
-      "min_version": "v1.0.0",
-      "max_version": null
+      "parser_version": "v1.0.0"
     }
   }
 }
@@ -138,37 +135,39 @@ it has been tested against.
 |-------|---------|
 | `lang` | Language identifier; must match the registry key |
 | `url` | Upstream parser repository URL |
-| `semver` | Whether the parser uses semver tags |
-| `min_version` | Oldest parser version these queries are known to work with |
-| `max_version` | Set when a breaking grammar change exists that queries have not yet been updated for; `null` means no upper bound |
+| `semver` | Whether the parser uses semver tags (`true`) or HEAD commits (`false`) |
+| `parser_version` | Exact git ref (tag or SHA) the queries are tested against. The installer uses this as the checkout target. `null` falls back to the latest tag or HEAD. |
 | `location` | Subdirectory within the parser repo (monorepos only) |
 | `queries_only` | `true` for inheritance-only virtual languages (no parser binary) |
-| `inherits` | Map of parent language name → `{ url, min_version, max_version }` |
+| `inherits` | Map of parent language name → `{ url, parser_version }` — pins the exact parent query repo ref used when these queries were validated |
 
 ### Why `inherits` matters
 
 When `typescript` inherits from `ecma`, the installer fetches the ecma query repo and merges its
-content into the typescript queries. Without version bounds on that fetch, a breaking change in
-the ecma query repo could silently break typescript.
+content into the typescript queries. The `inherits` block pins the exact version of each parent
+that was validated alongside these queries. The installer fetches that exact ref — not the latest
+— so the installed query set is always the one that passed CI.
 
-The `inherits` block lets the typescript query maintainer declare: *"I have tested against ecma
-queries `>= v1.0.0`"*. The installer respects these bounds when selecting which version of the
-ecma query repo to fetch — it finds the newest release that satisfies the constraint, rather than
-always using the absolute latest.
-
-This means:
-- Each query repo controls its own inheritance compatibility independently
-- A breaking change in a parent query repo does not automatically break children
-- Children can opt in to newer parent versions by updating their `inherits` bounds
-
-Query repo maintainers are responsible for keeping all version bounds accurate.
+When a parent query repo releases a new version, the child's `inherits.<lang>.parser_version` is bumped
+(manually or via the automated bump workflow) and CI re-validates the merged set before merging.
 
 ## Version Discovery
 
-The installer never reads a pinned revision from the registry. Instead it discovers the latest
-available version at update time using the host adapter for the repo's git forge.
+The query repo's `parser.json` is the source of truth for which parser version to install.
+The installer reads `parser_version` and fetches that exact ref — it does not query upstream
+APIs to find the "latest" version at install time.
+
+The `semver` flag has no role in the installer itself. It exists to inform the automated bump
+workflow (see below) about how to discover newer upstream releases:
+
+- `semver: true` — the bump workflow queries the parser repo's releases/tags API for the latest
+  `vX.Y.Z` tag and compares it to the current `parser_version`
+- `semver: false` — the bump workflow fetches the latest HEAD commit SHA and compares
 
 ### Host adapters (`hosts.lua`)
+
+The `hosts.lua` shim in this repo is used by the bump workflow (not the installer) to discover
+new parser versions across different git forges:
 
 | Host | Version check method |
 |------|---------------------|
@@ -194,19 +193,16 @@ and `git archive --remote` respectively.
 
 ## Caching
 
-Two independent caches, both stored in the installer's `install_dir`:
+One cache, stored in the installer's `install_dir`:
 
 | File | Contents | TTL | Format |
 |------|----------|-----|--------|
 | `treesitter-registry.json` | Full registry.json | 7 days | JSON |
 | `treesitter-registry-meta.lua` | `{ fetched_at = <unix_ts> }` | — | Lua |
-| `registry-cache.lua` | Latest available version per lang | 24 hours | Lua |
 
 The registry TTL is long because the catalogue changes rarely (new language added, URL changed).
-The version cache TTL is short because upstream tags frequently. `TSUpdate --force` bypasses both.
-
 On fetch failure the installer falls back to the stale cache with a warning rather than failing
-hard, so offline use remains possible.
+hard, so offline use remains possible. `TSUpdate!` bypasses the cache.
 
 ## Query Inheritance
 
