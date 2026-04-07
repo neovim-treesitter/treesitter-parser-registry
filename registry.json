@@ -3763,15 +3763,313 @@
       "type": "external_queries"
     }
   },
+  "v": {
+    "filetypes": [
+      "v"
+    ],
+    "source": {
+      "parser_location": "tree_sitter_v",
+      "parser_semver": false,
+      "parser_url": "https://github.com/vlang/v-analyzer",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-v",
+      "type": "external_queries"
+    }
+  },
+  "vala": {
+    "filetypes": [
+      "vala"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/vala-lang/tree-sitter-vala",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vala",
+      "type": "external_queries"
+    }
+  },
+  "vento": {
+    "filetypes": [
+      "vento"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/ventojs/tree-sitter-vento",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vento",
+      "type": "external_queries"
+    }
+  },
+  "vhdl": {
+    "filetypes": [
+      "vhdl"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/jpt13653903/tree-sitter-vhdl",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vhdl",
+      "type": "external_queries"
+    }
+  },
+  "vhs": {
+    "filetypes": [
+      "vhs"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/charmbracelet/tree-sitter-vhs",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vhs",
+      "type": "external_queries"
+    }
+  },
+  "vim": {
+    "filetypes": [
+      "vim"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-vim",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vim",
+      "type": "external_queries"
+    }
+  },
+  "vimdoc": {
+    "filetypes": [
+      "vimdoc"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/neovim/tree-sitter-vimdoc",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vimdoc",
+      "type": "external_queries"
+    }
+  },
+  "vrl": {
+    "filetypes": [
+      "vrl"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/belltoy/tree-sitter-vrl",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vrl",
+      "type": "external_queries"
+    }
+  },
+  "vue": {
+    "filetypes": [
+      "vue"
+    ],
+    "requires": [
+      "html_tags"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-vue",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-vue",
+      "type": "external_queries"
+    }
+  },
+  "wgsl": {
+    "filetypes": [
+      "wgsl"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/szebniok/tree-sitter-wgsl",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-wgsl",
+      "type": "external_queries"
+    }
+  },
+  "wgsl_bevy": {
+    "filetypes": [
+      "wgsl_bevy"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-wgsl-bevy",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-wgsl_bevy",
+      "type": "external_queries"
+    }
+  },
+  "wing": {
+    "filetypes": [
+      "wing"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/winglang/tree-sitter-wing",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-wing",
+      "type": "external_queries"
+    }
+  },
+  "wit": {
+    "filetypes": [
+      "wit"
+    ],
+    "source": {
+      "parser_semver": true,
+      "parser_url": "https://github.com/bytecodealliance/tree-sitter-wit",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-wit",
+      "type": "external_queries"
+    }
+  },
+  "wxml": {
+    "filetypes": [
+      "wxml"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/BlockLune/tree-sitter-wxml",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-wxml",
+      "type": "external_queries"
+    }
+  },
+  "xcompose": {
+    "filetypes": [
+      "xcompose"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-xcompose",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-xcompose",
+      "type": "external_queries"
+    }
+  },
+  "xml": {
+    "filetypes": [
+      "xml"
+    ],
+    "requires": [
+      "dtd"
+    ],
+    "source": {
+      "parser_location": "xml",
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-xml",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-xml",
+      "type": "external_queries"
+    }
+  },
+  "xresources": {
+    "filetypes": [
+      "xresources"
+    ],
+    "source": {
+      "parser_semver": true,
+      "parser_url": "https://github.com/ValdezFOmar/tree-sitter-xresources",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-xresources",
+      "type": "external_queries"
+    }
+  },
+  "yaml": {
+    "filetypes": [
+      "yaml"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-yaml",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-yaml",
+      "type": "external_queries"
+    }
+  },
+  "yang": {
+    "filetypes": [
+      "yang"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/Hubro/tree-sitter-yang",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-yang",
+      "type": "external_queries"
+    }
+  },
+  "yuck": {
+    "filetypes": [
+      "yuck"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-yuck",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-yuck",
+      "type": "external_queries"
+    }
+  },
+  "zathurarc": {
+    "filetypes": [
+      "zathurarc"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/Freed-Wu/tree-sitter-zathurarc",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-zathurarc",
+      "type": "external_queries"
+    }
+  },
+  "zig": {
+    "filetypes": [
+      "zig"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/tree-sitter-grammars/tree-sitter-zig",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-zig",
+      "type": "external_queries"
+    }
+  },
+  "ziggy": {
+    "filetypes": [
+      "ziggy"
+    ],
+    "source": {
+      "parser_location": "tree-sitter-ziggy",
+      "parser_semver": false,
+      "parser_url": "https://github.com/kristoff-it/ziggy",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-ziggy",
+      "type": "external_queries"
+    }
+  },
+  "ziggy_schema": {
+    "filetypes": [
+      "ziggy_schema"
+    ],
+    "source": {
+      "parser_location": "tree-sitter-ziggy-schema",
+      "parser_semver": false,
+      "parser_url": "https://github.com/kristoff-it/ziggy",
+      "queries_semver": true,
+      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-ziggy_schema",
+      "type": "external_queries"
+    }
+  },
   "zsh": {
     "filetypes": [
       "zsh"
     ],
     "source": {
-      "type": "self_contained",
-      "url": "https://github.com/georgeharker/tree-sitter-zsh",
+      "queries_dir": "nvim-queries",
       "semver": false,
-      "queries_dir": "nvim-queries"
+      "type": "self_contained",
+      "url": "https://github.com/georgeharker/tree-sitter-zsh"
     }
   }
 }
