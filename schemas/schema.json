@@ -58,9 +58,13 @@
           "items": { "type": "string" }
         },
         "host_parser": {
-          "description": "For queries_only languages: the parser repo that provides the grammar these queries target. The CI workflow builds this parser and aliases it as <lang>.so for validation.",
+          "description": "For queries_only languages: the parser repo that provides the grammar these queries target. The CI workflow builds this parser and uses parser_aliases to map the queries-only language name to the host language.",
           "type": "object",
           "properties": {
+            "lang": {
+              "description": "The host parser's language name (e.g. 'html' for html_tags, 'javascript' for ecma/jsx). Used to name the .so and create a parser_aliases entry.",
+              "type": "string"
+            },
             "url":            { "$ref": "#/$defs/gitUri" },
             "parser_version": {
               "description": "Exact git ref (tag or SHA) of the host parser to build for validation.",
@@ -68,7 +72,7 @@
             },
             "location":       { "type": ["string", "null"] }
           },
-          "required": ["url"],
+          "required": ["lang", "url"],
           "additionalProperties": false
         }
       },
