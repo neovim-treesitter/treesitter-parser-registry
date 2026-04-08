@@ -247,8 +247,6 @@ jobs:
           ISSUE_PATH="${RUNNER_TEMP}/ci-status-issue.md"
           [ -f "$ISSUE_PATH" ] || exit 0
 
-          BODY=$(cat "$ISSUE_PATH")
-
           # Find existing issue by title (pinned or not)
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" \
             --search "\"${TITLE}\" in:title" --state open \
@@ -256,12 +254,16 @@ jobs:
 
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --repo "$GITHUB_REPOSITORY" \
-              --body "$BODY"
+              --body-file "$ISSUE_PATH"
             echo "Updated issue #${EXISTING}"
           else
+            # Ensure label exists (no-op if it already does)
+            gh label create "ci-status" --repo "$GITHUB_REPOSITORY" \
+              --description "Automated CI status tracking" \
+              --color "0E8A16" 2>/dev/null || true
             gh issue create --repo "$GITHUB_REPOSITORY" \
               --title "$TITLE" \
-              --body "$BODY" \
+              --body-file "$ISSUE_PATH" \
               --label "ci-status"
             echo "Created new status issue"
           fi
