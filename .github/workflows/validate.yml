@@ -250,23 +250,49 @@ jobs:
           ISSUE_PATH="${RUNNER_TEMP}/ci-status-issue.md"
           [ -f "$ISSUE_PATH" ] || exit 0
 
-          # Find existing issue by title (pinned or not)
-          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" \
+          BODY=$(cat "$ISSUE_PATH")
+          HAS_FAILURES=$(grep -c '| `' "$ISSUE_PATH" || true)
+
+          # Find existing open issue
+          EXISTING_OPEN=$(gh issue list --repo "$GITHUB_REPOSITORY" \
             --search "\"${TITLE}\" in:title" --state open \
             --json number --jq '.[0].number' 2>/dev/null || true)
 
-          if [ -n "$EXISTING" ]; then
-            gh issue edit "$EXISTING" --repo "$GITHUB_REPOSITORY" \
-              --body-file "$ISSUE_PATH"
-            echo "Updated issue #${EXISTING}"
+          # Find existing closed issue (to reopen if needed)
+          EXISTING_CLOSED=$(gh issue list --repo "$GITHUB_REPOSITORY" \
+            --search "\"${TITLE}\" in:title" --state closed \
+            --json number --jq '.[0].number' 2>/dev/null || true)
+
+          if [ "$HAS_FAILURES" -gt 0 ]; then
+            # There are failures — create, update, or reopen
+            if [ -n "$EXISTING_OPEN" ]; then
+              gh issue edit "$EXISTING_OPEN" --repo "$GITHUB_REPOSITORY" \
+                --body-file "$ISSUE_PATH"
+              echo "Updated issue #${EXISTING_OPEN}"
+            elif [ -n "$EXISTING_CLOSED" ]; then
+              gh issue reopen "$EXISTING_CLOSED" --repo "$GITHUB_REPOSITORY"
+              gh issue edit "$EXISTING_CLOSED" --repo "$GITHUB_REPOSITORY" \
+                --body-file "$ISSUE_PATH"
+              echo "Reopened and updated issue #${EXISTING_CLOSED}"
+            else
+              gh label create "ci-status" --repo "$GITHUB_REPOSITORY" \
+                --description "Automated CI status tracking" \
+                --color "0E8A16" 2>/dev/null || true
+              gh issue create --repo "$GITHUB_REPOSITORY" \
+                --title "$TITLE" \
+                --body-file "$ISSUE_PATH" \
+                --label "ci-status"
+              echo "Created new status issue"
+            fi
           else
-            # Ensure label exists (no-op if it already does)
-            gh label create "ci-status" --repo "$GITHUB_REPOSITORY" \
-              --description "Automated CI status tracking" \
-              --color "0E8A16" 2>/dev/null || true
-            gh issue create --repo "$GITHUB_REPOSITORY" \
-              --title "$TITLE" \
-              --body-file "$ISSUE_PATH" \
-              --label "ci-status"
-            echo "Created new status issue"
+            # All passing — close any open issue
+            if [ -n "$EXISTING_OPEN" ]; then
+              gh issue edit "$EXISTING_OPEN" --repo "$GITHUB_REPOSITORY" \
+                --body-file "$ISSUE_PATH"
+              gh issue close "$EXISTING_OPEN" --repo "$GITHUB_REPOSITORY" \
+                --comment "All query repos passing."
+              echo "Closed issue #${EXISTING_OPEN} — all passing"
+            else
+              echo "No failures and no open issue — nothing to do"
+            fi
           fi
