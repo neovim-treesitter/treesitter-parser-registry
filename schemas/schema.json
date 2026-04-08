@@ -56,6 +56,20 @@
           "description": "Languages whose parsers are needed at runtime to satisfy injection queries (e.g. html injects css and javascript). Used by test infrastructure to skip injection assertions when a dependency parser is not installed.",
           "type": "array",
           "items": { "type": "string" }
+        },
+        "host_parser": {
+          "description": "For queries_only languages: the parser repo that provides the grammar these queries target. The CI workflow builds this parser and aliases it as <lang>.so for validation.",
+          "type": "object",
+          "properties": {
+            "url":            { "$ref": "#/$defs/gitUri" },
+            "parser_version": {
+              "description": "Exact git ref (tag or SHA) of the host parser to build for validation.",
+              "type": ["string", "null"]
+            },
+            "location":       { "type": ["string", "null"] }
+          },
+          "required": ["url"],
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
