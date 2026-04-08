@@ -10,13 +10,16 @@ on:
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ── 1. Schema validation ──────────────────────────────────────────────────
   schema:
     name: Validate schema
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install ajv-cli
         run: npm install --global ajv-cli ajv-formats
@@ -41,7 +44,7 @@ jobs:
     # Results are reported as annotations and a job summary only.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract and check all URLs
         run: |
@@ -100,7 +103,7 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check CI status for all query repos
         env:
