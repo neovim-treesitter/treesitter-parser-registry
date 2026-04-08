@@ -51,6 +51,11 @@
           "description": "Pinned parser versions for each inherited lang. Keys are language names matching registry entries. Each value pins the parser ref these queries were tested against.",
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/inheritRef" }
+        },
+        "inject_deps": {
+          "description": "Languages whose parsers are needed at runtime to satisfy injection queries (e.g. html injects css and javascript). Used by test infrastructure to skip injection assertions when a dependency parser is not installed.",
+          "type": "array",
+          "items": { "type": "string" }
         }
       },
       "additionalProperties": false
@@ -129,7 +134,12 @@
           ]
         },
         "filetypes": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-        "requires":  { "type": "array", "items": { "type": "string" } }
+        "requires":  { "type": "array", "items": { "type": "string" } },
+        "inject_deps": {
+          "description": "Languages whose parsers are needed at runtime to satisfy injection queries (e.g. html injects css and javascript). Used by test infrastructure to skip injection assertions when a dependency parser is not installed.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
       },
       "additionalProperties": false
     }
