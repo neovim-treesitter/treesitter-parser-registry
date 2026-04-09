@@ -7,13 +7,13 @@ Edit `registry.json` and add an entry following the schema in `schemas/schema.js
 Determine the source type:
 
 - Does the upstream parser repo ship its own Neovim queries in a `queries/` subdirectory?
-  Use `self_contained` and set `queries_path`.
+  Use `self_contained` and set `queries_path` or `queries_dir`.
 - Does a separate `nvim-treesitter-queries-<lang>` repo exist (or will you create one)?
   Use `external_queries`.
 - Is this a virtual language with no parser binary, only consumed via `; inherits:`?
   Use `queries_only`.
 
-### Minimum viable entry
+### Minimum viable entry (external_queries)
 
 ```json
 "mylang": {
@@ -30,6 +30,43 @@ Determine the source type:
 
 Set `parser_semver: false` if the upstream repo does not publish semver tags. This is an
 explicit opt-out — consider opening an issue upstream requesting semver releases.
+
+### Self-contained entry
+
+When the parser repo ships its own Neovim queries, use `self_contained`. The installer
+fetches queries directly from the parser repo — no separate query repo needed.
+
+```json
+"mylang": {
+  "source": {
+    "type": "self_contained",
+    "url": "https://github.com/author/tree-sitter-mylang",
+    "semver": true,
+    "queries_dir": "nvim-queries"
+  },
+  "filetypes": ["mylang"]
+}
+```
+
+Use exactly one of `queries_dir` or `queries_path`:
+
+- **`queries_dir`** — parent directory whose `<lang>/` subdirectory contains `.scm` files.
+  The installer appends `/<lang>` automatically. Example: `"queries_dir": "nvim-queries"`
+  means queries are at `nvim-queries/mylang/*.scm`.
+
+- **`queries_path`** — direct path to the directory containing `.scm` files, when the layout
+  does not follow the `<dir>/<lang>/` pattern. Example: `"queries_path": "queries/nvim"`.
+
+Additional optional fields for self-contained entries:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `location` | repo root | Subdirectory containing the parser source (monorepos) |
+| `generate` | `false` | Set `true` if `tree-sitter generate` is needed before compilation |
+| `generate_from_json` | `false` | When `generate` is true: `true` = use `src/grammar.json`, `false` = use `grammar.js` |
+
+For a full walkthrough of migrating an existing language to self-contained, see the
+[Self-Contained Migration Guide](self-contained-migration.md).
 
 ### Monorepo parsers
 
@@ -62,6 +99,50 @@ If this language's queries build on another language's (e.g. TypeScript on ECMAS
 The `; inherits: ecma` directive must also appear as the first line of any `.scm` file that
 extends the parent. The `requires` field in the registry entry is for documentation and
 pre-flight validation; the actual merge is driven by the directives in the `.scm` files.
+
+### Injection dependencies
+
+If a language's injection queries reference other languages (e.g. HTML injects CSS and
+JavaScript), declare those dependencies with `inject_deps` so that CI can build the
+required parsers for validation:
+
+In the **registry entry**:
+
+```json
+"html": {
+  "source": { ... },
+  "filetypes": ["html"],
+  "inject_deps": ["css", "javascript"]
+}
+```
+
+In a **query repo's `parser.json`**:
+
+```json
+{
+  "lang": "html",
+  "url": "https://github.com/tree-sitter/tree-sitter-html",
+  "semver": true,
+  "parser_version": "v0.23.2",
+  "inject_deps": ["css", "javascript"]
+}
+```
+
+For **self-contained** parsers using the reusable CI workflow, pass injection deps as a
+comma-separated input:
+
+```yaml
+  validate:
+    uses: neovim-treesitter/.github/.github/workflows/self-contained-validate.yml@main
+    with:
+      lang: html
+      queries-dir: nvim-queries
+      inject-deps: css,javascript
+```
+
+Without `inject_deps`, CI cannot validate injection queries that reference parsers not
+present in the test environment. The queries will still be syntactically checked, but
+injection-specific assertions may be skipped.
 
 ---
 
@@ -152,10 +233,12 @@ the template at `scripts/templates/query-validate.yml` in the `nvim-treesitter` 
 1. **Parser manifest** — `parser.json` is read with `jq` and validated against the JSON Schema
 2. **Parser build** — the parser source is fetched at `parser_version` and compiled with
    `tree-sitter build` to produce a `.so`
-3. **Query correctness** — `ts-query-ls check` is run against the `queries/` directory using
+3. **Query correctness** — `ts_query_ls check` is run against the `queries/` directory using
    the compiled parser, catching invalid node names, malformed predicates, and type errors
 4. **Inherited queries** — if `parser.json` declares an `inherits` block, CI fetches each parent
    query repo at the declared `parser_version` and validates the merged query set
+5. **Injection deps** — if `parser.json` declares `inject_deps`, CI builds those parsers so
+   injection queries can be validated
 
 A PR cannot be merged if CI fails. This enforces that every merged query set is known to work
 against the exact declared `parser_version`.
@@ -190,6 +273,64 @@ needed. The tag should reflect the significance of the change:
 - **minor** (`v1.x.0`) — new query coverage (new capture names, new injections, etc.)
 - **major** (`vx.0.0`) — breaking change in capture name conventions or required parser bump
   that installers need to be aware of
+
+---
+
+## CI/CD for self-contained parser repos
+
+Parser repos that ship their own Neovim queries use a separate reusable workflow
+([`self-contained-validate.yml`](https://github.com/neovim-treesitter/.github/blob/main/.github/workflows/self-contained-validate.yml))
+and a corresponding template at `scripts/templates/self-contained-validate.yml`.
+
+### What it validates
+
+1. **Parser build** — compiles the parser from the repo itself using `tree-sitter build`
+2. **Query correctness** — `ts_query_ls check` against the query directory
+3. **Inherited queries** — BFS resolution of `; inherits:` directives across query repos
+4. **Injection deps** — builds dependency parsers if `inject-deps` is specified
+5. **Highlight tests** — runs highlight assertion tests if `tests/highlights/` exists
+
+### Adding to your parser repo
+
+Add a job to your existing CI workflow (or create a standalone workflow):
+
+```yaml
+  nvim-query:
+    name: Validate nvim queries
+    uses: neovim-treesitter/.github/.github/workflows/self-contained-validate.yml@main
+    with:
+      lang: mylang
+      queries-dir: nvim-queries
+```
+
+Available inputs:
+
+| Input | Required | Description |
+|-------|----------|-------------|
+| `lang` | Yes | Language name (must match `<lang>/` subdirectory under `queries-dir`) |
+| `queries-dir` | One of | Parent directory whose `<lang>/` subdirectory has `.scm` files |
+| `queries-path` | these | Direct path to directory containing `.scm` files |
+| `parser-location` | No | Parser source subdirectory (monorepos) |
+| `inject-deps` | No | Comma-separated injection dependency languages |
+| `inherits` | No | Comma-separated inherited languages (auto-detected from `.scm` files) |
+
+For a full migration walkthrough, see the
+[Self-Contained Migration Guide](self-contained-migration.md).
+
+---
+
+## Registry-level CI
+
+The registry itself runs a
+[validation workflow](https://github.com/neovim-treesitter/treesitter-parser-registry/blob/main/.github/workflows/validate.yml)
+on push, PR, and weekly cron:
+
+1. **Schema validation** — `registry.json` is validated against `schemas/schema.json`
+2. **URL reachability** — all parser and query URLs are checked (warn-only, non-blocking)
+3. **Query repo health** — polls the latest CI run status for every query repo and
+   creates/updates a tracking issue listing failures
+
+This provides a single dashboard view of ecosystem health across all languages.
 
 ---
 
@@ -275,8 +416,9 @@ installer that:
 - Fetches parser sources and query repos on demand
 - Handles compilation, caching, and the `:TSInstall` / `:TSUpdate` UX
 
-Other installers (e.g. [ts-install.nvim](https://github.com/lewis6991/ts-install.nvim)) can
-adopt the same registry and query repos without duplicating the query maintenance effort.
+Other installers can adopt the same registry and query repos without duplicating the query
+maintenance effort. The registry schema is open and documented — any installer that can
+fetch and parse JSON can consume it.
 
 ---
 
