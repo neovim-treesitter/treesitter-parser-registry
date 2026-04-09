@@ -4,14 +4,26 @@
 
 Edit `registry.json` and add an entry following the schema in `schemas/schema.json`.
 
-Determine the source type:
+Neovim queries can live in one of two places:
 
-- Does the upstream parser repo ship its own Neovim queries in a `queries/` subdirectory?
-  Use `self_contained` and set `queries_path` or `queries_dir`.
-- Does a separate `nvim-treesitter-queries-<lang>` repo exist (or will you create one)?
-  Use `external_queries`.
-- Is this a virtual language with no parser binary, only consumed via `; inherits:`?
-  Use `queries_only`.
+1. **Inside the parser repo** (`self_contained`) — the parser maintainer ships queries
+   alongside the grammar. This is the **preferred** model because the people who know the
+   grammar best are maintaining the queries, and query changes can land in the same PR as
+   grammar changes.
+
+2. **In a separate query repo** (`external_queries`) — queries live in an
+   `nvim-treesitter-queries-<lang>` repo under the `neovim-treesitter` org, maintained
+   independently of the parser.
+
+If you maintain a parser and want to ship queries directly, see the
+[Self-Contained Migration Guide](self-contained-migration.md) for a full walkthrough.
+
+There is also a third type for special cases:
+
+3. **Queries only** (`queries_only`) — a virtual language with no parser binary, only
+   consumed via `; inherits:` directives (e.g. `ecma`, `jsx`, `html_tags`).
+
+Determine which applies and add the appropriate entry:
 
 ### Minimum viable entry (external_queries)
 
