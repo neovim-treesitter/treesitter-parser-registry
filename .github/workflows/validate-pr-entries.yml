@@ -1,0 +1,305 @@
+name: Validate Registry Entries CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - registry.json
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Which entries to check"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - changed
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  check-ci:
+    name: Check CI installed for new/changed entries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Find entries to validate
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          SCOPE: ${{ inputs.scope || 'changed' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # Resolve which entries to check
+          if [[ "$EVENT_NAME" == "pull_request" || "$SCOPE" == "changed" ]]; then
+            git show "${BASE_SHA}:registry.json" > /tmp/old-registry.json 2>/dev/null \
+              || echo '{}' > /tmp/old-registry.json
+          else
+            # all mode: treat old as empty so every entry is "changed"
+            echo '{}' > /tmp/old-registry.json
+          fi
+          cp registry.json /tmp/new-registry.json
+
+          python3 - <<'PYEOF'
+          import base64, json, os, subprocess, sys
+
+          VALIDATE_REUSABLE    = "neovim-treesitter/.github/.github/workflows/query-validate.yml@main"
+          BUMP_REUSABLE        = "neovim-treesitter/.github/.github/workflows/query-bump.yml@main"
+          SC_VALIDATE_REUSABLE = "neovim-treesitter/.github/.github/workflows/self-contained-validate.yml@main"
+
+          scope      = os.environ.get("SCOPE", "changed")
+          event_name = os.environ.get("EVENT_NAME", "pull_request")
+          is_pr      = event_name == "pull_request"
+          check_all  = (scope == "all") and not is_pr
+
+          with open("/tmp/old-registry.json") as f:
+              old = json.load(f)
+          with open("/tmp/new-registry.json") as f:
+              new = json.load(f)
+
+          # Collect entries to check
+          if check_all:
+              changed = [lang for lang in new if lang != "$schema"]
+              print(f"All-entries mode: checking {len(changed)} entries")
+          else:
+              changed = [
+                  lang for lang, entry in new.items()
+                  if lang != "$schema" and (lang not in old or old[lang] != entry)
+              ]
+              print(f"Changed-entries mode: {len(changed)} new/changed entries")
+
+          if not changed:
+              print("No entries to check.")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write("count=0\n")
+                  f.write("has_errors=false\n")
+              sys.exit(0)
+
+          print(f"Checking {len(changed)} {'entry' if len(changed) == 1 else 'entries'}...")
+
+          def gh_file(repo, path):
+              """Fetch a file's text content from GitHub. Returns None if missing."""
+              r = subprocess.run(
+                  ["gh", "api", f"repos/{repo}/contents/{path}", "--jq", ".content"],
+                  capture_output=True, text=True
+              )
+              if r.returncode != 0:
+                  return None
+              try:
+                  return base64.b64decode(r.stdout.strip()).decode()
+              except Exception:
+                  return None
+
+          def repo_exists(repo):
+              r = subprocess.run(
+                  ["gh", "repo", "view", repo, "--json", "name"],
+                  capture_output=True, text=True
+              )
+              return r.returncode == 0
+
+          def calls_reusable(content, reusable):
+              return reusable in (content or "")
+
+          errors = []
+          warnings = []
+          ok = []
+
+          for lang in changed:
+              entry = new.get(lang)
+              if not entry:
+                  warnings.append(f"**{lang}**: entry removed — skipping CI check")
+                  continue
+
+              src = entry.get("source", {})
+              stype = src.get("type", "external_queries")
+
+              # ── external_queries / queries_only ──────────────────────────
+              if stype in ("external_queries", "queries_only"):
+                  queries_url = src.get("queries_url") or src.get("url", "")
+                  if not queries_url or "github.com" not in queries_url:
+                      errors.append(
+                          f"**{lang}** (`{stype}`): no valid GitHub queries URL in registry"
+                      )
+                      continue
+
+                  parts = queries_url.rstrip("/").split("/")
+                  repo = f"{parts[-2]}/{parts[-1]}"
+
+                  if not repo_exists(repo):
+                      errors.append(
+                          f"**{lang}** (`{stype}`): query repo `{repo}` does not exist — "
+                          f"run `manage-query-repos.sh --create` after merging, or create it first"
+                      )
+                      continue
+
+                  entry_errors = []
+
+                  validate_content = gh_file(repo, ".github/workflows/validate.yml")
+                  if validate_content is None:
+                      entry_errors.append(f"missing `.github/workflows/validate.yml`")
+                  elif not calls_reusable(validate_content, VALIDATE_REUSABLE):
+                      entry_errors.append(
+                          f"`.github/workflows/validate.yml` does not call `{VALIDATE_REUSABLE}`"
+                      )
+
+                  bump_content = gh_file(repo, ".github/workflows/bump.yml")
+                  if bump_content is None:
+                      entry_errors.append(f"missing `.github/workflows/bump.yml`")
+                  elif not calls_reusable(bump_content, BUMP_REUSABLE):
+                      entry_errors.append(
+                          f"`.github/workflows/bump.yml` does not call `{BUMP_REUSABLE}`"
+                      )
+
+                  if entry_errors:
+                      for e in entry_errors:
+                          errors.append(f"**{lang}** (`{stype}`): `{repo}` — {e}")
+                  else:
+                      ok.append(f"**{lang}** (`{stype}`): `{repo}`")
+
+              # ── self_contained ────────────────────────────────────────────
+              elif stype == "self_contained":
+                  parser_url = src.get("url", "")
+                  if not parser_url or "github.com" not in parser_url:
+                      errors.append(
+                          f"**{lang}** (`self_contained`): no valid GitHub parser URL in registry"
+                      )
+                      continue
+
+                  parts = parser_url.rstrip("/").split("/")
+                  repo = f"{parts[-2]}/{parts[-1]}"
+
+                  if not repo_exists(repo):
+                      errors.append(
+                          f"**{lang}** (`self_contained`): parser repo `{repo}` does not exist"
+                      )
+                      continue
+
+                  # Find any workflow in the repo that calls self-contained-validate
+                  wf_list = subprocess.run(
+                      ["gh", "api", f"repos/{repo}/contents/.github/workflows",
+                       "--jq", ".[].name"],
+                      capture_output=True, text=True
+                  )
+                  wf_names = [
+                      n.strip() for n in wf_list.stdout.splitlines()
+                      if n.strip().endswith((".yml", ".yaml"))
+                  ]
+
+                  found = False
+                  for wf_name in wf_names:
+                      content = gh_file(repo, f".github/workflows/{wf_name}")
+                      if calls_reusable(content, SC_VALIDATE_REUSABLE):
+                          found = True
+                          break
+
+                  if not found:
+                      errors.append(
+                          f"**{lang}** (`self_contained`): `{repo}` has no workflow calling "
+                          f"`{SC_VALIDATE_REUSABLE}` — add one via "
+                          f"`manage-query-repos.sh --update-workflows`"
+                      )
+                  else:
+                      ok.append(f"**{lang}** (`self_contained`): `{repo}`")
+
+                  # Warn if a separate query repo also exists (may be stale)
+                  query_repo = f"neovim-treesitter/nvim-treesitter-queries-{lang}"
+                  if repo_exists(query_repo):
+                      warnings.append(
+                          f"**{lang}** (`self_contained`): separate query repo `{query_repo}` "
+                          f"also exists — is that intentional?"
+                      )
+
+              else:
+                  warnings.append(
+                      f"**{lang}**: unknown source type `{stype}` — CI check skipped"
+                  )
+
+          # ── Job summary ───────────────────────────────────────────────────
+          mode_label = "all entries" if check_all else f"{len(changed)} new/changed entries"
+          summary = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
+          with open(summary, "a") as f:
+              f.write("## Registry Entry CI Validation\n\n")
+              f.write(f"Checked **{mode_label}**.\n\n")
+              if ok:
+                  f.write(f"### ✅ OK ({len(ok)})\n\n")
+                  for line in ok:
+                      f.write(f"- {line}\n")
+                  f.write("\n")
+              if warnings:
+                  f.write(f"### ⚠️ Warnings ({len(warnings)})\n\n")
+                  for line in warnings:
+                      f.write(f"- {line}\n")
+                  f.write("\n")
+              if errors:
+                  f.write(f"### ❌ Errors ({len(errors)})\n\n")
+                  for line in errors:
+                      f.write(f"- {line}\n")
+                  f.write("\n> These errors must be fixed before merging.\n")
+
+          # ── PR comment body (only written for PR runs) ────────────────────
+          if is_pr:
+              comment_path = os.environ.get("RUNNER_TEMP", "/tmp") + "/pr-comment.md"
+              with open(comment_path, "w") as f:
+                  f.write("<!-- registry-ci-check -->\n")
+                  f.write("## Registry CI Check\n\n")
+                  if errors:
+                      f.write(
+                          f"❌ **{len(errors)} error(s)** in {len(changed)} changed "
+                          f"{'entry' if len(changed) == 1 else 'entries'}.\n\n"
+                      )
+                      for line in errors:
+                          f.write(f"- {line}\n")
+                      f.write("\n")
+                  if warnings:
+                      f.write(f"⚠️ **{len(warnings)} warning(s)**\n\n")
+                      for line in warnings:
+                          f.write(f"- {line}\n")
+                      f.write("\n")
+                  if not errors:
+                      if ok:
+                          f.write(f"✅ All {len(ok)} {'entry' if len(ok) == 1 else 'entries'} "
+                                  f"have correct CI installed.\n")
+                      else:
+                          f.write("ℹ️ No actionable entries found.\n")
+
+          # ── Outputs ───────────────────────────────────────────────────────
+          with open(os.environ.get("GITHUB_OUTPUT", "/dev/null"), "a") as f:
+              f.write(f"count={len(changed)}\n")
+              f.write(f"has_errors={'true' if errors else 'false'}\n")
+
+          if errors:
+              sys.exit(1)
+          PYEOF
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request' && steps.check.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          COMMENT_FILE="${RUNNER_TEMP}/pr-comment.md"
+          [ -f "$COMMENT_FILE" ] || exit 0
+
+          # Replace any previous comment from this check (identified by HTML marker)
+          EXISTING=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.body | startswith("<!-- registry-ci-check -->")) | .id' \
+            2>/dev/null | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING}" 2>/dev/null || true
+          fi
+
+          gh pr comment "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --body-file "$COMMENT_FILE"
