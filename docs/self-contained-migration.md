@@ -109,7 +109,7 @@ the parser provides, and what build flags are needed.
 {
     "lang": "mylang",
     "queries_dir": "nvim-queries",
-    "test_dir": "tests/highlights",
+    "test_dir": "nvim-queries/tests",
     "inject_deps": ["html", "css"],
     "location": "tree-sitter-mylang"
 }
@@ -138,11 +138,12 @@ The full schema is in
 ## Step 3 — (Optional) Add highlight assertion tests
 
 If the old query repo had highlight assertion tests in `tests/highlights/`,
-copy them into your parser repo:
+copy them into your parser repo alongside the queries:
 
 ```bash
 # From the old query repo
-cp -r /tmp/queries-mylang/tests/highlights tests/highlights
+mkdir -p nvim-queries/tests
+cp /tmp/queries-mylang/tests/highlights/* nvim-queries/tests/
 ```
 
 The layout should be:
@@ -151,16 +152,19 @@ The layout should be:
 tree-sitter-mylang/
 ├── test/                 # existing tree-sitter grammar tests (corpus)
 │   └── corpus/
-├── tests/                # nvim highlight assertion tests (separate!)
-│   └── highlights/
+├── nvim-queries/         # everything query-related lives here
+│   ├── mylang/
+│   │   └── highlights.scm ...
+│   └── tests/            # highlight assertion tests for the queries
 │       └── test.mylang
-├── parser.json           # declares test_dir: "tests/highlights"
+├── parser.json           # declares test_dir: "nvim-queries/tests"
 └── ...
 ```
 
-Note the intentional separation: `test/corpus/` is for tree-sitter grammar
-snapshot tests; `tests/highlights/` is for Neovim highlight assertion tests.
-They serve different purposes and are run by different tools.
+Query tests live under `nvim-queries/tests/` because they test the
+**queries**, not the parser grammar. This keeps them co-located with
+the `.scm` files they exercise and cleanly separated from the grammar's
+own `test/corpus/` tests.
 
 Highlight assertion tests use comment annotations to verify that the
 highlight query assigns the expected capture groups:
@@ -343,13 +347,12 @@ queries. Here is exactly what was done:
 tree-sitter-zsh/
 ├── parser.json
 ├── nvim-queries/
-│   └── zsh/
-│       ├── highlights.scm
-│       ├── injections.scm
-│       ├── locals.scm
-│       └── folds.scm
-├── tests/
-│   └── highlights/
+│   ├── zsh/
+│   │   ├── highlights.scm
+│   │   ├── injections.scm
+│   │   ├── locals.scm
+│   │   └── folds.scm
+│   └── tests/
 │       └── test.zsh
 ├── test/
 │   └── corpus/           # existing grammar tests (unchanged)
@@ -365,7 +368,7 @@ tree-sitter-zsh/
 {
     "lang": "zsh",
     "queries_dir": "nvim-queries",
-    "test_dir": "tests/highlights"
+    "test_dir": "nvim-queries/tests"
 }
 ```
 
@@ -448,12 +451,14 @@ The generic `queries/highlights.scm` (used by the tree-sitter CLI
 playground and other non-Neovim tools) is separate from the
 `nvim-queries/` directory. Keep both — they serve different audiences.
 
-### What's the difference between `test/` and `tests/`?
+### What's the difference between `test/` and `nvim-queries/tests/`?
 
 - `test/corpus/` — standard tree-sitter grammar tests (parse tree snapshots).
-  Run by `tree-sitter test`.
-- `tests/highlights/` — Neovim highlight assertion tests. Run by
-  `highlight-assertions` in CI. These verify that the highlight query
-  assigns the expected capture groups to source code ranges.
+  Run by `tree-sitter test`. These test the **parser**.
+- `nvim-queries/tests/` — Neovim highlight assertion tests. Run by
+  `highlight-assertions` in CI. These test the **queries** — verifying that
+  the highlight query assigns the expected capture groups to source code ranges.
 
-Both can coexist. They serve different purposes and are run by different tools.
+Both can coexist. They test different things and are run by different tools.
+Query tests live alongside the queries under `nvim-queries/` because they
+are semantically tied to the `.scm` files, not the grammar.
