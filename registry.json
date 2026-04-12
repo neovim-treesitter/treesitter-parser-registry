@@ -4067,7 +4067,7 @@
     ],
     "source": {
       "queries_dir": "nvim-queries",
-      "semver": false,
+      "semver": true,
       "type": "self_contained",
       "url": "https://github.com/georgeharker/tree-sitter-zsh"
     }
