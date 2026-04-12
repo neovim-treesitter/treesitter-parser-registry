@@ -34,13 +34,15 @@ tree-sitter-mylang/
 ├── grammar.js
 ├── src/
 ├── queries/              # generic tree-sitter queries (highlights.scm etc.)
-├── nvim-queries/         # Neovim-specific queries
-│   └── mylang/
-│       ├── highlights.scm
-│       ├── injections.scm    (optional)
-│       ├── folds.scm         (optional)
-│       ├── indents.scm       (optional)
-│       └── locals.scm        (optional)
+├── nvim-queries/         # Neovim-specific queries and tests
+│   ├── mylang/
+│   │   ├── highlights.scm
+│   │   ├── injections.scm    (optional)
+│   │   ├── folds.scm         (optional)
+│   │   ├── indents.scm       (optional)
+│   │   └── locals.scm        (optional)
+│   └── tests/                # highlight assertion tests for the queries
+│       └── test.mylang
 └── ...
 ```
 
