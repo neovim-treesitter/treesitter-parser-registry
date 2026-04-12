@@ -26,7 +26,7 @@
       "additionalProperties": false
     },
     "parserManifest": {
-      "description": "parser.json inside each query repo root",
+      "description": "parser.json inside each query repo or self-contained parser repo root",
       "type": "object",
       "required": ["lang"],
       "properties": {
@@ -39,6 +39,18 @@
           "type": ["string", "null"]
         },
         "queries_only":   { "type": ["boolean", "null"] },
+        "queries_dir": {
+          "description": "Parent directory whose <lang>/ subdirectory contains .scm files (e.g. 'nvim-queries'). Used by self-contained repos and the CI workflow.",
+          "type": ["string", "null"]
+        },
+        "queries_path": {
+          "description": "Direct path to directory containing .scm files. Mutually exclusive with queries_dir.",
+          "type": ["string", "null"]
+        },
+        "test_dir": {
+          "description": "Directory containing highlight assertion test files (e.g. 'tests/highlights'). Used by the self-contained validate workflow.",
+          "type": ["string", "null"]
+        },
         "generate": {
           "description": "Set true when the parser repo requires `tree-sitter generate` before compilation (no pre-built src/parser.c).",
           "type": ["boolean", "null"]

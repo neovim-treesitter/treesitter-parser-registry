@@ -16,9 +16,11 @@ land alongside grammar changes in the same PR.
 | Step | What | Where |
 |------|------|-------|
 | 1 | Add nvim query files to your parser repo | `tree-sitter-<lang>` |
-| 2 | Add the reusable CI workflow | `tree-sitter-<lang>` |
-| 3 | Update the registry entry to `self_contained` | `treesitter-parser-registry` |
-| 4 | (Optional) Archive the old query repo | `neovim-treesitter` org |
+| 2 | Create `parser.json` | `tree-sitter-<lang>` |
+| 3 | (Optional) Add highlight assertion tests | `tree-sitter-<lang>` |
+| 4 | Add the reusable CI workflow | `tree-sitter-<lang>` |
+| 5 | Update the registry entry to `self_contained` | `treesitter-parser-registry` |
+| 6 | (Optional) Archive the old query repo | `neovim-treesitter` org |
 
 ---
 
@@ -43,7 +45,7 @@ tree-sitter-mylang/
 ```
 
 The `nvim-queries/<lang>/` layout is recommended because it maps cleanly to
-the registry's `queries_dir` field. However, you can also place queries
+the `queries_dir` field in `parser.json`. However, you can also place queries
 directly in a flat directory (e.g. `queries/nvim/`) and use `queries_path`
 instead.
 
@@ -83,16 +85,101 @@ Adjust the pattern if you use a different directory layout.
 
 ---
 
-## Step 2 — Add CI
+## Step 2 — Create `parser.json`
 
-Add a workflow file that calls the reusable validation workflow from the
-`neovim-treesitter` org. This validates your nvim queries on every push
-and PR, just like the query repos do.
+Add a `parser.json` file at the root of your parser repo. This is the
+single source of truth for the CI workflow and the nvim-treesitter
+installer — it tells them where queries and tests live, what language
+the parser provides, and what build flags are needed.
 
 ### Minimal example
 
-Create `.github/workflows/nvim-queries.yml` (or add a job to your existing
-CI workflow):
+```json
+{
+    "lang": "mylang",
+    "queries_dir": "nvim-queries"
+}
+```
+
+### With highlight tests and optional fields
+
+```json
+{
+    "lang": "mylang",
+    "queries_dir": "nvim-queries",
+    "test_dir": "tests/highlights",
+    "inject_deps": ["html", "css"],
+    "location": "tree-sitter-mylang"
+}
+```
+
+### Field reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `lang` | **Yes** | Language name. Must match the subdirectory name under `queries_dir`. |
+| `queries_dir` | One of these | Parent directory whose `<lang>/` subdirectory contains `.scm` files (e.g. `"nvim-queries"`). |
+| `queries_path` | | Direct path to directory containing `.scm` files. Mutually exclusive with `queries_dir`. |
+| `test_dir` | No | Directory containing highlight assertion test files (e.g. `"tests/highlights"`). If present, CI runs the tests. |
+| `location` | No | Subdirectory containing parser source, for monorepo layouts. |
+| `inject_deps` | No | Array of languages whose parsers are needed for injection validation. |
+| `inherits` | No | Object mapping inherited language names to `{ "url": "...", "parser_version": "..." }`. |
+| `generate` | No | Set `true` when `tree-sitter generate` is needed before compilation. |
+| `generate_from_json` | No | When `generate` is true: `true` = use `src/grammar.json`, `false` = use `grammar.js`. |
+
+The full schema is in
+[`schemas/schema.json`](../schemas/schema.json)
+(see the `parserManifest` definition).
+
+---
+
+## Step 3 — (Optional) Add highlight assertion tests
+
+If the old query repo had highlight assertion tests in `tests/highlights/`,
+copy them into your parser repo:
+
+```bash
+# From the old query repo
+cp -r /tmp/queries-mylang/tests/highlights tests/highlights
+```
+
+The layout should be:
+
+```
+tree-sitter-mylang/
+├── test/                 # existing tree-sitter grammar tests (corpus)
+│   └── corpus/
+├── tests/                # nvim highlight assertion tests (separate!)
+│   └── highlights/
+│       └── test.mylang
+├── parser.json           # declares test_dir: "tests/highlights"
+└── ...
+```
+
+Note the intentional separation: `test/corpus/` is for tree-sitter grammar
+snapshot tests; `tests/highlights/` is for Neovim highlight assertion tests.
+They serve different purposes and are run by different tools.
+
+Highlight assertion tests use comment annotations to verify that the
+highlight query assigns the expected capture groups:
+
+```zsh
+echo "Hello"
+#^^^ @function.call @function.builtin
+#    ^^^^^^^ @string
+```
+
+Set `"test_dir": "tests/highlights"` in `parser.json` so CI picks them up.
+
+---
+
+## Step 4 — Add CI
+
+Add a workflow file that calls the reusable validation workflow from the
+`neovim-treesitter` org. The workflow reads `parser.json` for all
+configuration — no per-repo inputs are needed.
+
+Create `.github/workflows/nvim-queries.yml`:
 
 ```yaml
 name: Validate Queries (Self-Contained)
@@ -102,24 +189,29 @@ on:
     branches: [main]
     paths:
       - "nvim-queries/mylang/**"
+      - "tests/**"
+      - "parser.json"
   pull_request:
     branches: [main]
     paths:
       - "nvim-queries/mylang/**"
+      - "tests/**"
+      - "parser.json"
   workflow_dispatch:
 
 jobs:
   validate:
     uses: neovim-treesitter/.github/.github/workflows/self-contained-validate.yml@main
-    with:
-      lang: mylang
-      queries-dir: nvim-queries
 ```
+
+That's it. The reusable workflow reads `parser.json` from your repo root
+to determine the language name, query directory, test directory, injection
+dependencies, and all other settings. You can override any value by passing
+explicit `with:` inputs, but for most repos `parser.json` is sufficient.
 
 ### Adding to an existing CI workflow
 
-If your parser already has a CI workflow (most do via the standard
-`tree-sitter/parser-test-action`), add the query validation as an
+If your parser already has a CI workflow, add query validation as an
 additional job and extend the path triggers:
 
 ```yaml
@@ -131,12 +223,16 @@ on:
       - src/**
       - test/**
       - nvim-queries/**      # <-- add this
+      - tests/**             # <-- add this
+      - parser.json          # <-- add this
   pull_request:
     paths:
       - grammar.js
       - src/**
       - test/**
-      - nvim-queries/**      # <-- add this
+      - nvim-queries/**
+      - tests/**
+      - parser.json
 
 jobs:
   test:
@@ -145,25 +241,7 @@ jobs:
   query:
     name: Validate queries
     uses: neovim-treesitter/.github/.github/workflows/self-contained-validate.yml@main
-    with:
-      lang: mylang
-      queries-dir: nvim-queries
 ```
-
-### Workflow inputs reference
-
-| Input | Required | Description |
-|-------|----------|-------------|
-| `lang` | Yes | Language name (must match subdirectory name under `queries-dir`) |
-| `queries-dir` | One of these | Parent directory containing `<lang>/` with `.scm` files |
-| `queries-path` | required | Direct path to directory containing `.scm` files |
-| `parser-location` | No | Subdirectory containing parser source (for monorepos) |
-| `inject-deps` | No | Comma-separated injection dependency languages |
-| `inherits` | No | Comma-separated inherited languages |
-
-`queries-dir` and `queries-path` are mutually exclusive. Use `queries-dir`
-when your layout is `<dir>/<lang>/*.scm` (recommended). Use `queries-path`
-when queries are in a flat directory without the `<lang>/` nesting.
 
 ### What CI validates
 
@@ -172,12 +250,14 @@ when queries are in a flat directory without the `<lang>/` nesting.
    the compiled parser (invalid node names, malformed predicates, type errors)
 3. **Inherited queries** — if your queries use `; inherits:` directives, CI fetches
    the parent query repos and validates the merged set
-4. **Injection deps** — if specified, builds parsers for injected languages
-5. **Highlight tests** — if `tests/highlights/` exists, runs highlight assertion tests
+4. **Injection deps** — if specified in `parser.json`, builds parsers for injected languages
+5. **Highlight tests** — if `test_dir` is set in `parser.json` and the directory
+   exists, runs highlight assertion tests using
+   [`highlight-assertions`](https://github.com/nvim-treesitter/highlight-assertions)
 
 ---
 
-## Step 3 — Update the registry
+## Step 5 — Update the registry
 
 Open a PR against
 [`treesitter-parser-registry`](https://github.com/neovim-treesitter/treesitter-parser-registry)
@@ -232,12 +312,13 @@ to `self_contained`.
 - [ ] `url` points at your parser repo
 - [ ] `queries_dir` or `queries_path` matches your actual layout
 - [ ] `semver` reflects whether you publish semver tags
+- [ ] Your parser repo has a `parser.json` with at least `lang` and `queries_dir`
 - [ ] Your parser repo CI passes with the reusable workflow
 - [ ] `filetypes` and `requires` fields preserved from old entry
 
 ---
 
-## Step 4 — (Optional) Archive the old query repo
+## Step 6 — (Optional) Archive the old query repo
 
 Once the registry PR is merged, the old `nvim-treesitter-queries-<lang>`
 repo is no longer the source of truth. Notify the `neovim-treesitter` org
@@ -254,33 +335,64 @@ PR and an org maintainer will handle it.
 The `tree-sitter-zsh` parser is the reference implementation for self-contained
 queries. Here is exactly what was done:
 
-### Query layout
+### Repo layout
 
 ```
 tree-sitter-zsh/
+├── parser.json
 ├── nvim-queries/
 │   └── zsh/
 │       ├── highlights.scm
 │       ├── injections.scm
 │       ├── locals.scm
 │       └── folds.scm
+├── tests/
+│   └── highlights/
+│       └── test.zsh
+├── test/
+│   └── corpus/           # existing grammar tests (unchanged)
 ├── .tsqueryrc.json
-└── ...
+└── .github/
+    └── workflows/
+        └── validate-queries.yml
 ```
 
-### CI workflow (in `.github/workflows/ci.yml`)
+### `parser.json`
+
+```json
+{
+    "lang": "zsh",
+    "queries_dir": "nvim-queries",
+    "test_dir": "tests/highlights"
+}
+```
+
+### CI workflow (`.github/workflows/validate-queries.yml`)
 
 ```yaml
-  query:
-    name: Validate queries
+name: Validate Queries (Self-Contained)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nvim-queries/zsh/**"
+      - "tests/**"
+      - "parser.json"
+  pull_request:
+    branches: [main]
+    paths:
+      - "nvim-queries/zsh/**"
+      - "tests/**"
+      - "parser.json"
+  workflow_dispatch:
+
+jobs:
+  validate:
     uses: neovim-treesitter/.github/.github/workflows/self-contained-validate.yml@main
-    with:
-      lang: zsh
-      queries-dir: nvim-queries
 ```
 
-This is added alongside the existing `test` and `fuzz` jobs. The path
-triggers include `nvim-queries/**` so query-only changes also run CI.
+No `with:` inputs needed — everything comes from `parser.json`.
 
 ### Registry entry
 
@@ -311,16 +423,16 @@ from your parser repo. The query repo can remain as a read-only archive.
 
 The reusable workflow handles this automatically. It scans your `.scm`
 files for `; inherits:` directives and fetches the parent query repos
-via BFS. You can also pass explicit dependencies via the `inherits`
-input if needed.
+via BFS. You can also declare explicit dependencies in `parser.json`
+via the `inherits` field.
 
 You should also keep `requires` in your registry entry so the installer
 knows about the dependency chain.
 
 ### What if my parser is in a monorepo?
 
-Set `parser-location` in the workflow call and `location` in the registry
-entry to the subdirectory containing your parser source.
+Set `"location"` in `parser.json` to the subdirectory containing your
+parser source. Also set `location` in the registry entry.
 
 ### Do I need to change how I release?
 
@@ -333,3 +445,13 @@ is that queries are now fetched from the same repo and ref as the parser.
 The generic `queries/highlights.scm` (used by the tree-sitter CLI
 playground and other non-Neovim tools) is separate from the
 `nvim-queries/` directory. Keep both — they serve different audiences.
+
+### What's the difference between `test/` and `tests/`?
+
+- `test/corpus/` — standard tree-sitter grammar tests (parse tree snapshots).
+  Run by `tree-sitter test`.
+- `tests/highlights/` — Neovim highlight assertion tests. Run by
+  `highlight-assertions` in CI. These verify that the highlight query
+  assigns the expected capture groups to source code ranges.
+
+Both can coexist. They serve different purposes and are run by different tools.
