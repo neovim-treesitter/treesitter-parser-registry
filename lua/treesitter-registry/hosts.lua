@@ -4,6 +4,12 @@
 -- No API rate limits, no authentication required, works universally for
 -- public repos.  HTTP (lua/treesitter-registry/http.lua) is used only for
 -- tarball downloads and raw-file fetches, not for version discovery.
+--
+-- Threading contract:
+--   Callbacks are delivered directly from the vim.system callback (fast event
+--   context).  Callers must NOT invoke Neovim API functions that are
+--   forbidden in fast event context (e.g. nvim_echo, vim.fn.*).
+--   Wrap the callback in vim.schedule if main-loop context is required.
 
 local M = {}
 
@@ -28,66 +34,66 @@ local M = {}
 local generic = {}
 
 function generic.latest_tag(url, callback)
-  vim.system({
-    'git',
-    '-c',
-    'versionsort.suffix=-',
-    'ls-remote',
-    '--tags',
-    '--refs',
-    '--sort=v:refname',
-    url,
-  }, { text = true }, function(r)
-    if r.code ~= 0 then
-      return callback(nil, r.stderr)
-    end
-    local lines = vim.split(vim.trim(r.stdout), '\n')
-    for i = #lines, 1, -1 do
-      local tag = lines[i]:match('\trefs/tags/(v[%d%.]+)$')
-      if tag then
-        return callback(tag, nil)
-      end
-    end
-    callback(nil, 'no semver tags found')
-  end)
+	vim.system({
+		"git",
+		"-c",
+		"versionsort.suffix=-",
+		"ls-remote",
+		"--tags",
+		"--refs",
+		"--sort=v:refname",
+		url,
+	}, { text = true }, function(r)
+		if r.code ~= 0 then
+			return callback(nil, r.stderr)
+		end
+		local lines = vim.split(vim.trim(r.stdout), "\n")
+		for i = #lines, 1, -1 do
+			local tag = lines[i]:match("\trefs/tags/(v[%d%.]+)$")
+			if tag then
+				return callback(tag, nil)
+			end
+		end
+		callback(nil, "no semver tags found")
+	end)
 end
 
 function generic.latest_head(url, branch, callback)
-  local cmd = { 'git', 'ls-remote', url }
-  if branch then
-    cmd[#cmd + 1] = 'refs/heads/' .. branch
-  end
-  vim.system(cmd, { text = true }, function(r)
-    if r.code ~= 0 then
-      return callback(nil, r.stderr)
-    end
-    local lines = vim.split(vim.trim(r.stdout), '\n')
-    local target = branch and ('refs/heads/' .. branch) or 'HEAD'
-    for _, line in ipairs(lines) do
-      local sha, ref = line:match('^(%x+)\t(.+)$')
-      if sha and ref == target then
-        return callback(sha, nil)
-      end
-    end
-    local sha = vim.split(lines[1] or '', '\t')[1]
-    callback(sha ~= '' and sha or nil, sha == '' and 'empty response' or nil)
-  end)
+	local cmd = { "git", "ls-remote", url }
+	if branch then
+		cmd[#cmd + 1] = "refs/heads/" .. branch
+	end
+	vim.system(cmd, { text = true }, function(r)
+		if r.code ~= 0 then
+			return callback(nil, r.stderr)
+		end
+		local lines = vim.split(vim.trim(r.stdout), "\n")
+		local target = branch and ("refs/heads/" .. branch) or "HEAD"
+		for _, line in ipairs(lines) do
+			local sha, ref = line:match("^(%x+)\t(.+)$")
+			if sha and ref == target then
+				return callback(sha, nil)
+			end
+		end
+		local sha = vim.split(lines[1] or "", "\t")[1]
+		callback(sha ~= "" and sha or nil, sha == "" and "empty response" or nil)
+	end)
 end
 
 -- ---------------------------------------------------------------------------
 -- GitHub adapter
 -- ---------------------------------------------------------------------------
 local github = {
-  latest_tag = generic.latest_tag,
-  latest_head = generic.latest_head,
+	latest_tag = generic.latest_tag,
+	latest_head = generic.latest_head,
 }
 
 -- ---------------------------------------------------------------------------
 -- GitLab adapter
 -- ---------------------------------------------------------------------------
 local gitlab = {
-  latest_tag = generic.latest_tag,
-  latest_head = generic.latest_head,
+	latest_tag = generic.latest_tag,
+	latest_head = generic.latest_head,
 }
 
 -- ---------------------------------------------------------------------------
@@ -95,33 +101,33 @@ local gitlab = {
 -- ---------------------------------------------------------------------------
 
 M._adapters = {
-  ['github.com'] = github,
-  ['gitlab.com'] = gitlab,
+	["github.com"] = github,
+	["gitlab.com"] = gitlab,
 }
 
 --- Return the adapter for a given repo URL.
 ---@param url string
 ---@return HostAdapter
 function M.for_url(url)
-  for host, adapter in pairs(M._adapters) do
-    if url:find(host, 1, true) then
-      return adapter
-    end
-  end
-  return generic
+	for host, adapter in pairs(M._adapters) do
+		if url:find(host, 1, true) then
+			return adapter
+		end
+	end
+	return generic
 end
 
 --- Register a custom adapter for a git host.
 ---@param hostname string  e.g. "codeberg.org"
 ---@param adapter  HostAdapter
 function M.register(hostname, adapter)
-  M._adapters[hostname] = adapter
+	M._adapters[hostname] = adapter
 end
 
 -- Codeberg (Gitea)
-M.register('codeberg.org', {
-  latest_tag = generic.latest_tag,
-  latest_head = generic.latest_head,
+M.register("codeberg.org", {
+	latest_tag = generic.latest_tag,
+	latest_head = generic.latest_head,
 })
 
 return M
