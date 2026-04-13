@@ -15,23 +15,23 @@ local M = {}
 --- Locate this plugin's own registry.json on the rtp.
 ---@return string?
 local function find_registry_json()
-  -- Use the Lua module path to find our plugin root, then resolve
-  -- registry.json relative to it.
-  local info = debug.getinfo(1, 'S')
-  if info and info.source and info.source:sub(1, 1) == '@' then
-    local this_file = info.source:sub(2)
-    local plugin_root = vim.fn.fnamemodify(this_file, ':h:h')
-    local path = vim.fs.joinpath(plugin_root, 'registry.json')
-    if vim.uv.fs_stat(path) then
-      return path
-    end
-  end
-  -- Fallback: search the rtp (handles edge cases like bundled plugins)
-  local found = vim.api.nvim_get_runtime_file('registry.json', false)
-  if found and #found > 0 then
-    return found[1]
-  end
-  return nil
+	-- Use the Lua module path to find our plugin root, then resolve
+	-- registry.json relative to it.
+	local info = debug.getinfo(1, "S")
+	if info and info.source and info.source:sub(1, 1) == "@" then
+		local this_file = info.source:sub(2)
+		local plugin_root = vim.fn.fnamemodify(this_file, ":h:h")
+		local path = vim.fs.joinpath(plugin_root, "registry.json")
+		if vim.uv.fs_stat(path) then
+			return path
+		end
+	end
+	-- Fallback: search the rtp (handles edge cases like bundled plugins)
+	local found = vim.api.nvim_get_runtime_file("registry.json", false)
+	if found and #found > 0 then
+		return found[1]
+	end
+	return nil
 end
 
 --- Decode a file path as JSON.  Strips the `$schema` key (JSON Schema
@@ -40,17 +40,17 @@ end
 ---@return table?  data
 ---@return string? err
 local function decode_registry(path)
-  local ok, lines = pcall(vim.fn.readfile, path)
-  if not ok or #lines == 0 then
-    return nil, 'could not read ' .. path
-  end
-  local dok, data = pcall(vim.json.decode, table.concat(lines, '\n'))
-  if not dok or type(data) ~= 'table' then
-    return nil, 'JSON decode failed for ' .. path
-  end
-  ---@cast data table
-  data['$schema'] = nil
-  return data, nil
+	local ok, lines = pcall(vim.fn.readfile, path)
+	if not ok or #lines == 0 then
+		return nil, "could not read " .. path
+	end
+	local dok, data = pcall(vim.json.decode, table.concat(lines, "\n"))
+	if not dok or type(data) ~= "table" then
+		return nil, "JSON decode failed for " .. path
+	end
+	---@cast data table
+	data["$schema"] = nil
+	return data, nil
 end
 
 -- ---------------------------------------------------------------------------
@@ -66,38 +66,49 @@ M.loaded = nil
 ---@param lang string
 ---@return table?
 function M.get(lang)
-  if not M.loaded then
-    return nil
-  end
-  return M.loaded[lang]
+	if not M.loaded then
+		return nil
+	end
+	return M.loaded[lang]
 end
 
 --- Load the registry from this plugin's bundled registry.json.
 ---
---- Synchronous filesystem read — no network, no cache, no TTL.
---- To update the registry data the user simply updates this plugin.
+--- The filesystem read is synchronous, but the callback is always delivered
+--- via vim.schedule so callers are resumed in the main loop regardless of
+--- what context they called from.  This mirrors the contract the old
+--- HTTP-based loader provided and keeps coroutine callers safe from
+--- fast-event-context restrictions.
 ---
 ---@param callback  fun(registry: table?, err: string?)
 ---@param opts      table?   unused, reserved for future options
 function M.load(callback, opts)
-  _ = opts
+	_ = opts
 
-  local path = find_registry_json()
-  if not path then
-    return callback(
-      nil,
-      'treesitter-registry: registry.json not found.\n'
-        .. 'Ensure the treesitter-parser-registry plugin is installed.'
-    )
-  end
+	local path = find_registry_json()
+	if not path then
+		vim.schedule(function()
+			callback(
+				nil,
+				"treesitter-registry: registry.json not found.\n"
+					.. "Ensure the treesitter-parser-registry plugin is installed."
+			)
+		end)
+		return
+	end
 
-  local data, err = decode_registry(path)
-  if not data then
-    return callback(nil, 'treesitter-registry: ' .. (err or 'unknown error'))
-  end
+	local data, err = decode_registry(path)
+	if not data then
+		vim.schedule(function()
+			callback(nil, "treesitter-registry: " .. (err or "unknown error"))
+		end)
+		return
+	end
 
-  M.loaded = data
-  callback(data, nil)
+	M.loaded = data
+	vim.schedule(function()
+		callback(data, nil)
+	end)
 end
 
 return M
