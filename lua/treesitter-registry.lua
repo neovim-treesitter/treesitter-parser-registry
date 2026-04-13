@@ -1,102 +1,114 @@
 -- lua/treesitter-registry.lua
--- Fetch, cache and decode the treesitter-parser-registry.
--- Vendored by installers; also ships with the registry repo as reference.
+-- Public API for the treesitter-parser-registry plugin.
 --
--- Uses lua/treesitter-registry/http.lua (vim.system + curl binary) for all
--- HTTP traffic — no external Lua dependencies required.
+-- Loads the bundled registry.json from this plugin's own directory on the
+-- rtp and exposes a simple load/get interface.  No HTTP, no caching, no
+-- external dependencies — the registry data ships with the plugin and is
+-- updated when the user updates the plugin via their package manager.
 
 local M = {}
 
--- GitHub Contents API endpoint — returns raw JSON when Accept header is set.
-local REGISTRY_URL =
-    "https://api.github.com/repos/neovim-treesitter/treesitter-parser-registry/contents/registry.json?ref=main"
+-- ---------------------------------------------------------------------------
+-- Internal helpers
+-- ---------------------------------------------------------------------------
 
--- Registry is stable data (new langs added rarely). 7-day TTL.
-local REGISTRY_TTL = 604800
-
---- Returns the path to the cached registry JSON file.
----@param cache_dir string
----@return string
-local function reg_path(cache_dir)
-    return vim.fs.joinpath(cache_dir, "treesitter-registry.json")
+--- Locate this plugin's own registry.json on the rtp.
+---@return string?
+local function find_registry_json()
+	-- Use the Lua module path to find our plugin root, then resolve
+	-- registry.json relative to it.
+	local info = debug.getinfo(1, "S")
+	if info and info.source and info.source:sub(1, 1) == "@" then
+		local this_file = info.source:sub(2)
+		local plugin_root = vim.fn.fnamemodify(this_file, ":h:h")
+		local path = vim.fs.joinpath(plugin_root, "registry.json")
+		if vim.uv.fs_stat(path) then
+			return path
+		end
+	end
+	-- Fallback: search the rtp (handles edge cases like bundled plugins)
+	local found = vim.api.nvim_get_runtime_file("registry.json", false)
+	if found and #found > 0 then
+		return found[1]
+	end
+	return nil
 end
 
---- Returns the path to the registry cache metadata file.
----@param cache_dir string
----@return string
-local function meta_path(cache_dir)
-    return vim.fs.joinpath(cache_dir, "treesitter-registry-meta.lua")
+--- Decode a file path as JSON.  Strips the `$schema` key (JSON Schema
+--- metadata, not a language entry).
+---@param path string
+---@return table?  data
+---@return string? err
+local function decode_registry(path)
+	local ok, lines = pcall(vim.fn.readfile, path)
+	if not ok or #lines == 0 then
+		return nil, "could not read " .. path
+	end
+	local dok, data = pcall(vim.json.decode, table.concat(lines, "\n"))
+	if not dok or type(data) ~= "table" then
+		return nil, "JSON decode failed for " .. path
+	end
+	---@cast data table
+	data["$schema"] = nil
+	return data, nil
 end
 
---- Load registry. Uses local cache when fresh; fetches otherwise.
---- Falls back to stale cache if fetch fails (with a warning).
----@param cache_dir string  writable directory for cached files
----@param opts      { force?: boolean }?
+-- ---------------------------------------------------------------------------
+-- Public API
+-- ---------------------------------------------------------------------------
+
+--- The last-successfully-loaded registry table, or nil.
+---@type table?
+M.loaded = nil
+
+--- Synchronous lookup in the last-loaded registry.
+--- Returns nil if the registry has not been loaded yet.
+---@param lang string
+---@return table?
+function M.get(lang)
+	if not M.loaded then
+		return nil
+	end
+	return M.loaded[lang]
+end
+
+--- Load the registry from this plugin's bundled registry.json.
+---
+--- The filesystem read is synchronous, but the callback is always delivered
+--- via vim.schedule so callers are resumed in the main loop regardless of
+--- what context they called from.  This mirrors the contract the old
+--- HTTP-based loader provided and keeps coroutine callers safe from
+--- fast-event-context restrictions.
+---
 ---@param callback  fun(registry: table?, err: string?)
-function M.load(cache_dir, opts, callback)
-    opts = opts or {}
-    local rp = reg_path(cache_dir)
-    local mp = meta_path(cache_dir)
+---@param opts      table?   unused, reserved for future options
+function M.load(callback, opts)
+	_ = opts
 
-    -- Check freshness unless force-refresh requested
-    if not opts.force then
-        local ok, meta = pcall(dofile, mp)
-        if ok and type(meta) == "table" then
-            if (os.time() - (meta.fetched_at or 0)) < REGISTRY_TTL then
-                local lines = vim.fn.readfile(rp)
-                if #lines > 0 then
-                    local dok, decoded = pcall(vim.json.decode, table.concat(lines, "\n"))
-                    if dok then
-                        return callback(decoded, nil)
-                    end
-                end
-            end
-        end
-    end
+	local path = find_registry_json()
+	if not path then
+		vim.schedule(function()
+			callback(
+				nil,
+				"treesitter-registry: registry.json not found.\n"
+					.. "Ensure the treesitter-parser-registry plugin is installed."
+			)
+		end)
+		return
+	end
 
-    -- Fetch fresh copy
-    local http = require("treesitter-registry.http")
-    local headers = {
-        accept = "application/vnd.github.raw+json",
-        ["x-github-api-version"] = "2022-11-28",
-    }
-    local token = vim.env.GITHUB_TOKEN
-    if token and token ~= "" then
-        headers["authorization"] = "Bearer " .. token
-    end
-    http.get(REGISTRY_URL, { headers = headers, timeout = 15000 }, function(response, err)
-        if err or (response and response.status ~= 200) then
-            -- Stale fallback
-            local rok, lines = pcall(vim.fn.readfile, rp)
-            if rok and #lines > 0 then
-                local dok, decoded = pcall(vim.json.decode, table.concat(lines, "\n"))
-                if dok then
-                    vim.notify(
-                        "treesitter-registry: using stale cache (fetch failed"
-                            .. (response and ", HTTP " .. tostring(response.status) or "")
-                            .. (err and ", " .. err or "")
-                            .. ")",
-                        vim.log.levels.WARN
-                    )
-                    return callback(decoded, nil)
-                end
-            end
-            return callback(nil, "treesitter-registry: fetch failed and no cache available")
-        end
+	local data, err = decode_registry(path)
+	if not data then
+		vim.schedule(function()
+			callback(nil, "treesitter-registry: " .. (err or "unknown error"))
+		end)
+		return
+	end
 
-        vim.fn.mkdir(cache_dir, "p")
-        vim.fn.writefile(vim.split(response.body, "\n"), rp)
-        vim.fn.writefile(
-            { "return { fetched_at = " .. os.time() .. " }" },
-            mp
-        )
-
-        local dok, decoded = pcall(vim.json.decode, response.body)
-        if not dok then
-            return callback(nil, "treesitter-registry: JSON decode failed")
-        end
-        callback(decoded, nil)
-    end)
+	M.loaded = data
+	vim.schedule(function()
+		callback(data, nil)
+	end)
 end
 
 return M

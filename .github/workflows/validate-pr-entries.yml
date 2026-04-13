@@ -2,7 +2,6 @@ name: Validate Registry Entries CI
 
 on:
   pull_request:
-    branches: [main]
     paths:
       - registry.json
   workflow_dispatch:

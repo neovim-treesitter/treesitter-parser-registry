@@ -2,9 +2,7 @@ name: Validate Registry
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
   schedule:
     # Weekly: check URL reachability and subrepo CI health even without code changes
     - cron: "0 6 * * 1"
@@ -245,8 +243,13 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
-          TITLE="Query Repo CI Status"
+          if [ "$BRANCH" = "main" ]; then
+            TITLE="Query Repo CI Status"
+          else
+            TITLE="Query Repo CI Status [$BRANCH]"
+          fi
           ISSUE_PATH="${RUNNER_TEMP}/ci-status-issue.md"
           [ -f "$ISSUE_PATH" ] || exit 0
 
