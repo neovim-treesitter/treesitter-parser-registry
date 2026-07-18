@@ -3497,7 +3497,10 @@
   },
   "terraform": {
     "filetypes": [
-      "terraform"
+      "terraform",
+      "terraform-vars",
+      "opentofu",
+      "opentofu-vars"
     ],
     "requires": [
       "hcl"
