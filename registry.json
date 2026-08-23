@@ -96,18 +96,6 @@
       "type": "external_queries"
     }
   },
-  "authzed": {
-    "filetypes": [
-      "authzed"
-    ],
-    "source": {
-      "parser_semver": false,
-      "parser_url": "https://github.com/mleonidas/tree-sitter-authzed",
-      "queries_semver": true,
-      "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-authzed",
-      "type": "external_queries"
-    }
-  },
   "awk": {
     "filetypes": [
       "awk"
@@ -3213,6 +3201,20 @@
       "queries_semver": true,
       "queries_url": "https://github.com/neovim-treesitter/nvim-treesitter-queries-sparql",
       "type": "external_queries"
+    }
+  },
+  "spicedb": {
+    "filetypes": [
+      "spicedb",
+      "authzed",
+      "zed"
+    ],
+    "source": {
+      "parser_semver": false,
+      "parser_url": "https://github.com/authzed/tree-sitter-spicedb",
+      "queries_semver": false,
+      "type": "self_contained",
+      "queries_dir": "queries-nvim"
     }
   },
   "sproto": {
