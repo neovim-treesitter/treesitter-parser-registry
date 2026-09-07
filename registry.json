@@ -80,6 +80,15 @@
       "type": "external_queries"
     }
   },
+  "asn1": {
+    "source": {
+      "type": "self_contained",
+      "url": "https://github.com/JonathanWilbur/tree-sitter-asn1",
+      "semver": true,
+      "queries_dir": "nvim-queries"
+    },
+    "filetypes": ["asn1"]
+  },
   "astro": {
     "filetypes": [
       "astro"
